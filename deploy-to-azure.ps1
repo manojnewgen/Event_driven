@@ -1,4 +1,4 @@
-# Azure Deployment Script - Clean Version
+# Azure Deployment Script
 param(
     [string]$ResourceGroup = "rg-event-driven-app",
     [string]$Location = "East US",

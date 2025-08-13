@@ -1,0 +1,274 @@
+name: .NET Event-Driven Architecture CI/CD
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  AZURE_RESOURCE_GROUP: 'rg-event-driven-app'
+  AZURE_CONTAINER_APP: 'app-event-driven'
+  AZURE_CONTAINER_REGISTRY: 'acreventdriven8168'
+  IMAGE_NAME: 'event-driven-api'
+
+jobs:
+  # Build and Test Job
+  build-and-test:
+    runs-on: ubuntu-latest
+    name: 'Build and Test'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore dependencies
+      run: dotnet restore EventDrivenArchitecture.sln
+
+    - name: Build solution
+      run: dotnet build EventDrivenArchitecture.sln --no-restore --configuration Release
+
+    - name: Run tests
+      run: dotnet test EventDrivenArchitecture.sln --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: '**/TestResults/**/*.xml'
+
+    - name: Upload code coverage
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: code-coverage
+        path: '**/TestResults/**/*.cobertura.xml'
+
+  # Security Scan Job
+  security-scan:
+    runs-on: ubuntu-latest
+    name: 'Security Scan'
+    needs: build-and-test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore EventDrivenArchitecture.sln
+
+    - name: Run security scan
+      run: |
+        dotnet tool install --global Microsoft.DevSkim.CLI
+        devskim analyze src/ --output-format sarif --output-file security-results.sarif || true
+
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-results
+        path: security-results.sarif
+
+  # Docker Build Job
+  docker-build:
+    runs-on: ubuntu-latest
+    name: 'Build Docker Image'
+    needs: [build-and-test, security-scan]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io
+        username: ${{ secrets.AZURE_ACR_USERNAME }}
+        password: ${{ secrets.AZURE_ACR_PASSWORD }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: src/EventDrivenArchitecture.API/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+
+    - name: Image vulnerability scan
+      uses: azure/container-scan@v0
+      with:
+        image-name: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+        username: ${{ secrets.AZURE_ACR_USERNAME }}
+        password: ${{ secrets.AZURE_ACR_PASSWORD }}
+
+  # Deploy to Azure Container Apps
+  deploy-to-azure:
+    runs-on: ubuntu-latest
+    name: 'Deploy to Azure'
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Deploy to Azure Container Apps
+      uses: azure/container-apps-deploy-action@v1
+      with:
+        appSourcePath: ${{ github.workspace }}
+        acrName: ${{ env.AZURE_CONTAINER_REGISTRY }}
+        containerAppName: ${{ env.AZURE_CONTAINER_APP }}
+        resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+        imageToBuild: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        dockerfilePath: src/EventDrivenArchitecture.API/Dockerfile
+
+    - name: Update Container App with new image
+      run: |
+        az containerapp update \
+          --name ${{ env.AZURE_CONTAINER_APP }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+
+  # Health Check Job
+  health-check:
+    runs-on: ubuntu-latest
+    name: 'Health Check'
+    needs: deploy-to-azure
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Get Container App URL
+      id: get-url
+      run: |
+        URL=$(az containerapp show \
+          --name ${{ env.AZURE_CONTAINER_APP }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --query "properties.configuration.ingress.fqdn" \
+          --output tsv)
+        echo "APP_URL=https://$URL" >> $GITHUB_OUTPUT
+
+    - name: Wait for deployment
+      run: sleep 30
+
+    - name: Health check
+      run: |
+        echo "Testing health endpoint..."
+        response=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.get-url.outputs.APP_URL }}/health)
+        if [ $response -eq 200 ]; then
+          echo "✅ Health check passed! Application is healthy."
+        else
+          echo "❌ Health check failed! HTTP status: $response"
+          exit 1
+        fi
+
+    - name: API endpoint tests
+      run: |
+        echo "Testing API endpoints..."
+        BASE_URL="${{ steps.get-url.outputs.APP_URL }}"
+        
+        # Test Swagger endpoint
+        swagger_response=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/swagger")
+        echo "Swagger endpoint: $swagger_response"
+        
+        # Test API endpoints (basic connectivity)
+        echo "Testing API endpoints for connectivity..."
+        curl -s -f "$BASE_URL/health" || exit 1
+        
+        echo "✅ All health checks passed!"
+
+  # Notification Job
+  notify:
+    runs-on: ubuntu-latest
+    name: 'Notify Deployment Status'
+    needs: [deploy-to-azure, health-check]
+    if: always() && github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Notify Success
+      if: needs.deploy-to-azure.result == 'success' && needs.health-check.result == 'success'
+      run: |
+        echo "🎉 Deployment successful!"
+        echo "✅ Application: ${{ env.AZURE_CONTAINER_APP }}"
+        echo "✅ Resource Group: ${{ env.AZURE_RESOURCE_GROUP }}"
+        echo "✅ Image: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:latest"
+        echo "✅ Health checks: Passed"
+
+    - name: Notify Failure
+      if: needs.deploy-to-azure.result == 'failure' || needs.health-check.result == 'failure'
+      run: |
+        echo "❌ Deployment failed!"
+        echo "Please check the logs for more details."
+        exit 1
+
+  # Cleanup Job (optional)
+  cleanup:
+    runs-on: ubuntu-latest
+    name: 'Cleanup Old Images'
+    needs: [deploy-to-azure]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Cleanup old images
+      run: |
+        echo "Cleaning up old container images..."
+        az acr repository show-manifests \
+          --name ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --repository ${{ env.IMAGE_NAME }} \
+          --orderby time_desc \
+          --query "[10:].[digest]" \
+          --output tsv | \
+        xargs -I {} az acr repository delete \
+          --name ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --image ${{ env.IMAGE_NAME }}@{} \
+          --yes || true
+        echo "✅ Cleanup completed"
