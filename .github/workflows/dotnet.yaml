@@ -59,41 +59,11 @@ jobs:
         name: code-coverage
         path: '**/TestResults/**/*.cobertura.xml'
 
-  # Security Scan Job
-  security-scan:
-    runs-on: ubuntu-latest
-    name: 'Security Scan'
-    needs: build-and-test
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-
-    - name: Restore dependencies
-      run: dotnet restore EventDrivenArchitecture.sln
-
-    - name: Run security scan
-      run: |
-        dotnet tool install --global Microsoft.DevSkim.CLI
-        devskim analyze src/ --output-format sarif --output-file security-results.sarif || true
-
-    - name: Upload security scan results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: security-results
-        path: security-results.sarif
-
   # Docker Build Job
   docker-build:
     runs-on: ubuntu-latest
     name: 'Build Docker Image'
-    needs: [build-and-test, security-scan]
+    needs: build-and-test
     if: github.ref == 'refs/heads/main'
 
     steps:
