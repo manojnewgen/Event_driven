@@ -1,0 +1,14 @@
+services:
+  api:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "5043:8080"   # Map to development port
+    volumes:
+      - ./src/EventDrivenArchitecture.API/appsettings.Development.json:/app/appsettings.Development.json:ro
+    build:
+      target: build   # Use build stage for development (includes SDK for hot reload)
+
+  rabbitmq:
+    ports:
+      - "15672:15672"  # Expose management UI in development

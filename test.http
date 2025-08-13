@@ -1,0 +1,48 @@
+# Event-Driven Architecture API Tests
+# Update the URL with your actual deployed app URL
+
+@baseUrl = https://app-event-driven.ambitiousbush-1e0767e1.eastus.azurecontainerapps.io
+
+### Health Check
+GET {{baseUrl}}/health
+
+### Create Order (Publishes OrderCreatedEvent)
+POST {{baseUrl}}/api/order
+Content-Type: application/json
+
+{
+  "customerId": "CUST-001",
+  "items": [
+    {
+      "productId": "PROD-001",
+      "productName": "Gaming Laptop",
+      "quantity": 1,
+      "unitPrice": 1299.99
+    },
+    {
+      "productId": "PROD-002", 
+      "productName": "Wireless Mouse",
+      "quantity": 2,
+      "unitPrice": 29.99
+    }
+  ]
+}
+
+### Process Payment (Publishes PaymentProcessedEvent)
+POST {{baseUrl}}/api/payment/process
+Content-Type: application/json
+
+{
+  "orderId": "123e4567-e89b-12d3-a456-426614174000",
+  "amount": 1359.97,
+  "paymentMethod": "CreditCard"
+}
+
+### Process Order (Publishes OrderProcessedEvent)
+POST {{baseUrl}}/api/order/123e4567-e89b-12d3-a456-426614174000/process
+
+### Get API Info
+GET {{baseUrl}}/api
+
+### Swagger Documentation
+GET {{baseUrl}}/swagger

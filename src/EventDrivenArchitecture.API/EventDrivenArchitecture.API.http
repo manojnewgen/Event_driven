@@ -1,0 +1,40 @@
+@host = https://localhost:7043
+
+### Create Order
+POST {{host}}/api/order
+Content-Type: application/json
+
+{
+  "customerId": "customer-123",
+  "items": [
+    {
+      "productId": "product-1",
+      "productName": "Sample Product",
+      "quantity": 2,
+      "unitPrice": 29.99
+    },
+    {
+      "productId": "product-2", 
+      "productName": "Another Product",
+      "quantity": 1,
+      "unitPrice": 15.50
+    }
+  ]
+}
+
+###
+
+### Process Order (replace the GUID with actual OrderId from create response)
+POST {{host}}/api/order/12345678-1234-1234-1234-123456789012/process
+
+###
+
+### Process Payment  
+POST {{host}}/api/payment/process
+Content-Type: application/json
+
+{
+  "orderId": "12345678-1234-1234-1234-123456789012",
+  "amount": 75.48,
+  "paymentMethod": "CreditCard"
+}

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.2" />
+    <PackageReference Include="MassTransit.Azure.ServiceBus.Core" Version="8.5.2" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.19" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EventDrivenArchitecture.Domain\EventDrivenArchitecture.Domain.csproj" />
+    <ProjectReference Include="..\EventDrivenArchitecture.Publishers\EventDrivenArchitecture.Publishers.csproj" />
+    <ProjectReference Include="..\EventDrivenArchitecture.Consumers\EventDrivenArchitecture.Consumers.csproj" />
+  </ItemGroup>
+
+</Project>
