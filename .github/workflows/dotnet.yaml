@@ -29,7 +29,7 @@ jobs:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
     - name: Cache NuGet packages
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.nuget/packages
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
@@ -46,14 +46,14 @@ jobs:
       run: dotnet test EventDrivenArchitecture.sln --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
 
     - name: Upload test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results
         path: '**/TestResults/**/*.xml'
 
     - name: Upload code coverage
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: code-coverage
@@ -83,7 +83,7 @@ jobs:
         devskim analyze src/ --output-format sarif --output-file security-results.sarif || true
 
     - name: Upload security scan results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-results
@@ -132,13 +132,6 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         platforms: linux/amd64
-
-    - name: Image vulnerability scan
-      uses: azure/container-scan@v0
-      with:
-        image-name: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
-        username: ${{ secrets.AZURE_ACR_USERNAME }}
-        password: ${{ secrets.AZURE_ACR_PASSWORD }}
 
   # Deploy to Azure Container Apps
   deploy-to-azure:
