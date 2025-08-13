@@ -143,6 +143,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
     - name: Get Container App URL
       id: get-url
       run: |
