@@ -2,6 +2,8 @@
 
 A complete event-driven microservices architecture built with .NET 8, MassTransit, and deployed to Azure Container Apps.
 
+> **🚀 Status**: Successfully deployed to Azure Container Apps with automated CI/CD pipeline!
+
 ## 🏗️ Architecture Overview
 
 This project demonstrates a modern event-driven architecture with the following components:
