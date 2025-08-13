@@ -378,12 +378,5 @@ curl https://your-app-url/health
 
 ---
 
-## 📞 Support
-
-For questions or issues:
-1. **Check logs**: Use Azure Container Apps logs for debugging
-2. **Test locally**: Use Docker Compose for local development
-3. **Review documentation**: This README covers all deployment steps
-4. **Health check**: Verify application status via `/health` endpoint
 
 **🎉 Your event-driven architecture is now successfully deployed and running in Azure Container Apps!**
